@@ -1,5 +1,5 @@
 {
-	"name": "delight-im/auth",
+	"name": "jppreusdev/auth",
 	"description": "Authentication for PHP. Simple, lightweight and secure.",
 	"require": {
 		"php": ">=5.6.0",
@@ -10,7 +10,7 @@
 	},
 	"type": "library",
 	"keywords": [ "auth", "authentication", "login", "security" ],
-	"homepage": "https://github.com/delight-im/PHP-Auth",
+	"homepage": "https://github.com/jppreusdev/PHP-Auth",
 	"license": "MIT",
 	"autoload": {
 		"psr-4": {
