@@ -30,6 +30,11 @@ abstract class UserManager {
 	const SESSION_FIELD_USER_ID = 'auth_user_id';
 	/** @var string session field for the email address of the user who is currently signed in (if any) */
 	const SESSION_FIELD_EMAIL = 'auth_email';
+	/** @var string session field for the email address of the user who is currently signed in (if any) */
+	const SESSION_FIELD_COMPANY_NAME = 'auth_company_name';
+	const SESSION_FIELD_FIRST_NAME = 'auth_first_name';
+	const SESSION_FIELD_LAST_NAME = 'auth_last_name';
+	const SESSION_FIELD_JOB_TITLE = 'auth_job_title';
 	/** @var string session field for the display name (if any) of the user who is currently signed in (if any) */
 	const SESSION_FIELD_USERNAME = 'auth_username';
 	/** @var string session field for the status of the user who is currently signed in (if any) as one of the constants from the {@see Status} class */
@@ -93,6 +98,28 @@ abstract class UserManager {
 		$this->dbSchema = $dbSchema !== null ? (string) $dbSchema : null;
 		$this->dbTablePrefix = (string) $dbTablePrefix;
 	}
+	
+	protected function gen_uuid() {
+		return sprintf( '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+			// 32 bits for "time_low"
+			mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ),
+
+			// 16 bits for "time_mid"
+			mt_rand( 0, 0xffff ),
+
+			// 16 bits for "time_hi_and_version",
+			// four most significant bits holds version number 4
+			mt_rand( 0, 0x0fff ) | 0x4000,
+
+			// 16 bits, 8 bits for "clk_seq_hi_res",
+			// 8 bits for "clk_seq_low",
+			// two most significant bits holds zero and one for variant DCE1.1
+			mt_rand( 0, 0x3fff ) | 0x8000,
+
+			// 48 bits for "node"
+			mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff )
+		);
+	}
 
 	/**
 	 * Creates a new user
@@ -124,13 +151,15 @@ abstract class UserManager {
 	 * @see confirmEmail
 	 * @see confirmEmailAndSignIn
 	 */
-	protected function createUserInternal($requireUniqueUsername, $email, $password, $username = null, callable $callback = null) {
+	protected function createUserInternal($requireUniqueUsername, $email, $password, $username = null, $business_id,  callable $callback = null) {
 		\ignore_user_abort(true);
 
 		$email = self::validateEmailAddress($email);
 		$password = self::validatePassword($password);
 
 		$username = isset($username) ? \trim($username) : null;
+		
+		$business_id = trim($business_id);
 
 		// if the supplied username is the empty string or has consisted of whitespace only
 		if ($username === '') {
@@ -166,6 +195,7 @@ abstract class UserManager {
 					'email' => $email,
 					'password' => $password,
 					'username' => $username,
+					'business_id' => $business_id,
 					'verified' => $verified,
 					'registered' => \time()
 				]
@@ -186,6 +216,50 @@ abstract class UserManager {
 		}
 
 		return $newUserId;
+	}
+	
+	/**
+	 *
+	 *
+	 *
+	 *
+	 *
+	 *
+	 */
+	protected function generateCompanyId($company_name) {
+		
+		    # --- ENCRYPTION ---
+
+			# the key should be random binary, use scrypt, bcrypt or PBKDF2 to
+			# convert a string into a key
+			# key is specified using hexadecimal
+			$key = pack('H*', "0cd9a2f7b582c31bfc0de3e05180ce10");
+			
+			# show key size use either 16, 24 or 32 byte keys for AES-128, 192
+			# and 256 respectively
+			$key_size =  strlen($key);
+			
+			$plaintext = $company_name;
+
+			# create a random IV to use with CBC encoding
+			$iv_size = mcrypt_get_iv_size(MCRYPT_RIJNDAEL_128, MCRYPT_MODE_CBC);
+			$iv = mcrypt_create_iv($iv_size, MCRYPT_RAND);
+			
+			# creates a cipher text compatible with AES (Rijndael block size = 128)
+			# to keep the text confidential 
+			# only suitable for encoded input that never ends with value 00h
+			# (because of default zero padding)
+			$ciphertext = mcrypt_encrypt(MCRYPT_RIJNDAEL_128, $key,
+										 $plaintext, MCRYPT_MODE_CBC, $iv);
+
+			# prepend the IV for it to be available for decryption
+			$ciphertext = $iv . $ciphertext;
+			
+			# encode the resulting cipher text so it can be represented by a string
+			$ciphertext_base64 = base64_encode($ciphertext);
+			
+			return $ciphertext_base64;
+		
 	}
 
 	/**
@@ -229,7 +303,7 @@ abstract class UserManager {
 	 * @param bool $remembered whether the user has been remembered (instead of them having authenticated actively)
 	 * @throws AuthError if an internal problem occurred (do *not* catch)
 	 */
-	protected function onLoginSuccessful($userId, $email, $username, $status, $roles, $forceLogout, $remembered) {
+	protected function onLoginSuccessful($userId, $email, $username, $company_name = null, $first_name = null, $last_name = null, $job_title = null, $status, $roles, $forceLogout, $remembered) {
 		// re-generate the session ID to prevent session fixation attacks (requests a cookie to be written on the client)
 		Session::regenerate(true);
 
@@ -238,6 +312,10 @@ abstract class UserManager {
 		$_SESSION[self::SESSION_FIELD_USER_ID] = (int) $userId;
 		$_SESSION[self::SESSION_FIELD_EMAIL] = $email;
 		$_SESSION[self::SESSION_FIELD_USERNAME] = $username;
+		$_SESSION[self::SESSION_FIELD_COMPANY_NAME] = $company_name;
+		$_SESSION[self::SESSION_FIELD_FIRST_NAME] = $first_name;
+		$_SESSION[self::SESSION_FIELD_LAST_NAME] = $last_name;
+		$_SESSION[self::SESSION_FIELD_JOB_TITLE] = $job_title;
 		$_SESSION[self::SESSION_FIELD_STATUS] = (int) $status;
 		$_SESSION[self::SESSION_FIELD_ROLES] = (int) $roles;
 		$_SESSION[self::SESSION_FIELD_FORCE_LOGOUT] = (int) $forceLogout;

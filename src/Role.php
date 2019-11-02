@@ -12,6 +12,7 @@ final class Role {
 
 	const ADMIN = 1;
 	const AUTHOR = 2;
+	const COLLABORATOR = 3;
 	const COLLABORATOR = 4;
 	const CONSULTANT = 8;
 	const CONSUMER = 16;

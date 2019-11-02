@@ -115,7 +115,7 @@ final class Auth extends UserManager {
 				if (!empty($parts[0]) && !empty($parts[1])) {
 					try {
 						$rememberData = $this->db->selectRow(
-							'SELECT a.user, a.token, a.expires, b.email, b.username, b.status, b.roles_mask, b.force_logout FROM ' . $this->makeTableName('users_remembered') . ' AS a JOIN ' . $this->makeTableName('users') . ' AS b ON a.user = b.id WHERE a.selector = ?',
+							'SELECT a.user, a.token, a.expires, b.email, b.username, b.first_name, b.last_name, b.status, b.roles_mask, b.force_logout FROM ' . $this->makeTableName('users_remembered') . ' AS a JOIN ' . $this->makeTableName('users') . ' AS b ON a.user = b.id WHERE a.selector = ?',
 							[ $parts[0] ]
 						);
 					}
@@ -129,7 +129,7 @@ final class Auth extends UserManager {
 								// the cookie and its contents have now been proven to be valid
 								$valid = true;
 
-								$this->onLoginSuccessful($rememberData['user'], $rememberData['email'], $rememberData['username'], $rememberData['status'], $rememberData['roles_mask'], $rememberData['force_logout'], true);
+								$this->onLoginSuccessful($rememberData['user'], $rememberData['email'], $rememberData['username'], $rememberData['first_name'], $rememberData['last_name'], $rememberData['status'], $rememberData['roles_mask'], $rememberData['force_logout'], true);
 							}
 						}
 					}
@@ -157,7 +157,7 @@ final class Auth extends UserManager {
 				// fetch the authoritative data from the database again
 				try {
 					$authoritativeData = $this->db->selectRow(
-						'SELECT email, username, status, roles_mask, force_logout FROM ' . $this->makeTableName('users') . ' WHERE id = ?',
+						'SELECT email, username, company_name, first_name, last_name, job_title, status, roles_mask, force_logout FROM ' . $this->makeTableName('users') . ' WHERE id = ?',
 						[ $this->getUserId() ]
 					);
 				}
@@ -181,6 +181,10 @@ final class Auth extends UserManager {
 					else {
 						// the session data needs to be updated
 						$_SESSION[self::SESSION_FIELD_EMAIL] = $authoritativeData['email'];
+						$_SESSION[self::SESSION_FIELD_COMPANY_NAME] = $authoritativeData['company_name'];
+						$_SESSION[self::SESSION_FIELD_FIRST_NAME] = $authoritativeData['first_name'];
+						$_SESSION[self::SESSION_FIELD_LAST_NAME] = $authoritativeData['last_name'];
+						$_SESSION[self::SESSION_FIELD_JOB_TITLE] = $authoritativeData['job_title'];
 						$_SESSION[self::SESSION_FIELD_USERNAME] = $authoritativeData['username'];
 						$_SESSION[self::SESSION_FIELD_STATUS] = (int) $authoritativeData['status'];
 						$_SESSION[self::SESSION_FIELD_ROLES] = (int) $authoritativeData['roles_mask'];
@@ -227,11 +231,11 @@ final class Auth extends UserManager {
 	 * @see confirmEmail
 	 * @see confirmEmailAndSignIn
 	 */
-	public function register($email, $password, $username = null, callable $callback = null) {
+	public function register($email, $password, $username = null, $company, callable $callback = null) {
 		$this->throttle([ 'enumerateUsers', $this->getIpAddress() ], 1, (60 * 60), 75);
 		$this->throttle([ 'createNewAccount', $this->getIpAddress() ], 1, (60 * 60 * 12), 5, true);
 
-		$newUserId = $this->createUserInternal(false, $email, $password, $username, $callback);
+		$newUserId = $this->createUserInternal(false, $email, $password, $username, $company, $callback);
 
 		$this->throttle([ 'createNewAccount', $this->getIpAddress() ], 1, (60 * 60 * 12), 5, false);
 
@@ -268,11 +272,11 @@ final class Auth extends UserManager {
 	 * @see confirmEmail
 	 * @see confirmEmailAndSignIn
 	 */
-	public function registerWithUniqueUsername($email, $password, $username = null, callable $callback = null) {
+	public function registerWithUniqueUsername($email, $password, $username = null, $business_id, callable $callback = null) {
 		$this->throttle([ 'enumerateUsers', $this->getIpAddress() ], 1, (60 * 60), 75);
 		$this->throttle([ 'createNewAccount', $this->getIpAddress() ], 1, (60 * 60 * 12), 5, true);
 
-		$newUserId = $this->createUserInternal(true, $email, $password, $username, $callback);
+		$newUserId = $this->createUserInternal(true, $email, $password, $username, $business_id, $callback);
 
 		$this->throttle([ 'createNewAccount', $this->getIpAddress() ], 1, (60 * 60 * 12), 5, false);
 
@@ -404,6 +408,10 @@ final class Auth extends UserManager {
 			unset($_SESSION[self::SESSION_FIELD_LOGGED_IN]);
 			unset($_SESSION[self::SESSION_FIELD_USER_ID]);
 			unset($_SESSION[self::SESSION_FIELD_EMAIL]);
+			unset($_SESSION[self::SESSION_FIELD_COMPANY_NAME]);
+			unset($_SESSION[self::SESSION_FIELD_FIRST_NAME]);
+			unset($_SESSION[self::SESSION_FIELD_LAST_NAME]);
+			unset($_SESSION[self::SESSION_FIELD_JOB_TITLE]);
 			unset($_SESSION[self::SESSION_FIELD_USERNAME]);
 			unset($_SESSION[self::SESSION_FIELD_STATUS]);
 			unset($_SESSION[self::SESSION_FIELD_ROLES]);
@@ -563,7 +571,7 @@ final class Auth extends UserManager {
 		}
 	}
 
-	protected function onLoginSuccessful($userId, $email, $username, $status, $roles, $forceLogout, $remembered) {
+	protected function onLoginSuccessful($userId, $email, $username, $company_name, $first_name, $last_name, $job_title, $status, $roles, $forceLogout, $remembered) {
 		// update the timestamp of the user's last login
 		try {
 			$this->db->update(
@@ -576,7 +584,7 @@ final class Auth extends UserManager {
 			throw new DatabaseError($e->getMessage());
 		}
 
-		parent::onLoginSuccessful($userId, $email, $username, $status, $roles, $forceLogout, $remembered);
+		parent::onLoginSuccessful($userId, $email, $username, $company_name, $first_name, $last_name, $job_title, $status, $roles, $forceLogout, $remembered);
 	}
 
 	/**
@@ -731,10 +739,10 @@ final class Auth extends UserManager {
 
 				$userData = $this->getUserDataByEmailAddress(
 					$emailBeforeAndAfter[1],
-					[ 'id', 'email', 'username', 'status', 'roles_mask', 'force_logout' ]
+					[ 'id', 'email', 'username', 'company_name', 'first_name', 'last_name', 'job_title', 'status', 'roles_mask', 'force_logout' ]
 				);
 
-				$this->onLoginSuccessful($userData['id'], $userData['email'], $userData['username'], $userData['status'], $userData['roles_mask'], $userData['force_logout'], true);
+				$this->onLoginSuccessful($userData['id'], $userData['email'], $userData['username'], $userData['company_name'], $userData['first_name'], $userData['last_name'], $userData['job_title'], $userData['status'], $userData['roles_mask'], $userData['force_logout'], true);
 
 				if ($rememberDuration !== null) {
 					$this->createRememberDirective($userData['id'], $rememberDuration);
@@ -1033,7 +1041,7 @@ final class Auth extends UserManager {
 		$this->throttle([ 'enumerateUsers', $this->getIpAddress() ], 1, (60 * 60), 75);
 		$this->throttle([ 'attemptToLogin', $this->getIpAddress() ], 4, (60 * 60), 5, true);
 
-		$columnsToFetch = [ 'id', 'email', 'password', 'verified', 'username', 'status', 'roles_mask', 'force_logout' ];
+		$columnsToFetch = [ 'id', 'email', 'company_name', 'first_name', 'last_name', 'job_title', 'password', 'verified', 'username', 'status', 'roles_mask', 'force_logout' ];
 
 		if ($email !== null) {
 			$email = self::validateEmailAddress($email);
@@ -1070,7 +1078,7 @@ final class Auth extends UserManager {
 
 			if ((int) $userData['verified'] === 1) {
 				if (!isset($onBeforeSuccess) || (\is_callable($onBeforeSuccess) && $onBeforeSuccess($userData['id']) === true)) {
-					$this->onLoginSuccessful($userData['id'], $userData['email'], $userData['username'], $userData['status'], $userData['roles_mask'], $userData['force_logout'], false);
+					$this->onLoginSuccessful($userData['id'], $userData['email'], $userData['username'], $userData['company_name'], $userData['first_name'], $userData['last_name'], $userData['job_title'], $userData['status'], $userData['roles_mask'], $userData['force_logout'], false);
 
 					// continue to support the old parameter format
 					if ($rememberDuration === true) {
@@ -1449,6 +1457,48 @@ final class Auth extends UserManager {
 	public function getEmail() {
 		if (isset($_SESSION) && isset($_SESSION[self::SESSION_FIELD_EMAIL])) {
 			return $_SESSION[self::SESSION_FIELD_EMAIL];
+		}
+		else {
+			return null;
+		}
+	}
+	
+	/**
+	 * Returns the currently signed-in user's email address by reading from the session
+	 *
+	 * @return string the email address
+	 */
+	public function getCompanyName() {
+		if (isset($_SESSION) && isset($_SESSION[self::SESSION_FIELD_COMPANY_NAME])) {
+			return $_SESSION[self::SESSION_FIELD_COMPANY_NAME];
+		}
+		else {
+			return null;
+		}
+	}
+	
+	/**
+	 * Returns the currently signed-in user's email address by reading from the session
+	 *
+	 * @return string the email address
+	 */
+	public function getFirstName() {
+		if (isset($_SESSION) && isset($_SESSION[self::SESSION_FIELD_FIRST_NAME])) {
+			return $_SESSION[self::SESSION_FIELD_FIRST_NAME];
+		}
+		else {
+			return null;
+		}
+	}
+	
+	/**
+	 * Returns the currently signed-in user's email address by reading from the session
+	 *
+	 * @return string the email address
+	 */
+	public function getLastName() {
+		if (isset($_SESSION) && isset($_SESSION[self::SESSION_FIELD_LAST_NAME])) {
+			return $_SESSION[self::SESSION_FIELD_LAST_NAME];
 		}
 		else {
 			return null;
