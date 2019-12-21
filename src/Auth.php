@@ -1500,7 +1500,7 @@ final class Auth extends UserManager {
 	 */
 	public function getLastName() {
 		if($last_name = $this->db->selectValue(
-			'SELECT first_name FROM ' . $this->makeTableName('users') . ' WHERE id = ?',
+			'SELECT last_name FROM ' . $this->makeTableName('users') . ' WHERE id = ?',
 			[ $this->getUserId() ]
 		)) {
 			return $last_name;
