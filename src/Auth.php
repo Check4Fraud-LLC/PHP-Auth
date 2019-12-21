@@ -1499,10 +1499,12 @@ final class Auth extends UserManager {
 	 * @return string the email address
 	 */
 	public function getLastName() {
-		if (isset($_SESSION) && isset($_SESSION[self::SESSION_FIELD_LAST_NAME])) {
-			return $_SESSION[self::SESSION_FIELD_LAST_NAME];
-		}
-		else {
+		if($last_name = $this->db->selectValue(
+			'SELECT first_name FROM ' . $this->makeTableName('users') . ' WHERE id = ?',
+			[ $this->getUserId() ]
+		)) {
+			return $last_name;
+		} else {
 			return null;
 		}
 	}
