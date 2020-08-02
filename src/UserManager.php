@@ -218,6 +218,75 @@ abstract class UserManager {
 		return $newUserId;
 	}
 	
+	
+	protected function createUserInternalFromSettings($requireUniqueUsername, $email, $password, $username = null, $business_id,  callable $callback = null) {
+		\ignore_user_abort(true);
+
+		$email = self::validateEmailAddress($email);
+		$password = self::validatePassword($password);
+
+		$username = isset($username) ? \trim($username) : null;
+		
+		$business_id = trim($business_id);
+
+		// if the supplied username is the empty string or has consisted of whitespace only
+		if ($username === '') {
+			// this actually means that there is no username
+			$username = null;
+		}
+
+		// if the uniqueness of the username is to be ensured
+		if ($requireUniqueUsername) {
+			// if a username has actually been provided
+			if ($username !== null) {
+				// count the number of users who do already have that specified username
+				$occurrencesOfUsername = $this->db->selectValue(
+					'SELECT COUNT(*) FROM ' . $this->makeTableName('users') . ' WHERE username = ?',
+					[ $username ]
+				);
+
+				// if any user with that username does already exist
+				if ($occurrencesOfUsername > 0) {
+					// cancel the operation and report the violation of this requirement
+					throw new DuplicateUsernameException();
+				}
+			}
+		}
+
+		$password = \password_hash($password, \PASSWORD_DEFAULT);
+		$verified = \is_callable($callback) ? 0 : 1;
+
+		try {
+			$this->db->insert(
+				$this->makeTableNameComponents('users'),
+				[
+					'email' => $email,
+					'password' => $password,
+					'username' => $username,
+					'business_id' => $business_id,
+					'verified' => 1,
+					'registered' => \time()
+				]
+			);
+		}
+		// if we have a duplicate entry
+		catch (IntegrityConstraintViolationException $e) {
+			throw new UserAlreadyExistsException();
+		}
+		catch (Error $e) {
+			throw new DatabaseError($e->getMessage());
+		}
+
+		$newUserId = (int) $this->db->getLastInsertId();
+
+		if ($verified === 0) {
+			$this->createConfirmationRequest($newUserId, $email, $callback);
+		}
+
+		return $newUserId;
+	}
+	
+	
 	/**
 	 *
 	 *
