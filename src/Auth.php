@@ -282,6 +282,17 @@ final class Auth extends UserManager {
 
 		return $newUserId;
 	}
+	
+	public function registerWithUniqueUsernameFromSettings($email, $password, $username = null, $business_id, callable $callback = null) {
+		$this->throttle([ 'enumerateUsers', $this->getIpAddress() ], 1, (60 * 60), 75);
+		$this->throttle([ 'createNewAccount', $this->getIpAddress() ], 1, (60 * 60 * 12), 5, true);
+
+		$newUserId = $this->createUserInternalFromSettings(true, $email, $password, $username, $business_id, $callback);
+
+		$this->throttle([ 'createNewAccount', $this->getIpAddress() ], 1, (60 * 60 * 12), 5, false);
+
+		return $newUserId;
+	}
 
 	/**
 	 * Attempts to sign in a user with their email address and password
