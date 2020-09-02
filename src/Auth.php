@@ -282,17 +282,6 @@ final class Auth extends UserManager {
 
 		return $newUserId;
 	}
-	
-	public function registerWithUniqueUsernameFromSettings($email, $password, $username = null, $business_id, callable $callback = null) {
-		$this->throttle([ 'enumerateUsers', $this->getIpAddress() ], 1, (60 * 60), 75);
-		$this->throttle([ 'createNewAccount', $this->getIpAddress() ], 1, (60 * 60 * 12), 5, true);
-
-		$newUserId = $this->createUserInternalFromSettings(true, $email, $password, $username, $business_id, $callback);
-
-		$this->throttle([ 'createNewAccount', $this->getIpAddress() ], 1, (60 * 60 * 12), 5, false);
-
-		return $newUserId;
-	}
 
 	/**
 	 * Attempts to sign in a user with their email address and password
@@ -982,7 +971,7 @@ final class Auth extends UserManager {
 	 * @throws TooManyRequestsException if the number of allowed attempts/requests has been exceeded
 	 * @throws AuthError if an internal problem occurred (do *not* catch)
 	 */
-	public function forgotPassword($email, callable $callback, $requestExpiresAfter = null, $maxOpenRequests = null) {
+	public function forgotPassword($email, $username, callable $callback, $requestExpiresAfter = null, $maxOpenRequests = null) {
 		$email = self::validateEmailAddress($email);
 
 		$this->throttle([ 'enumerateUsers', $this->getIpAddress() ], 1, (60 * 60), 75);
@@ -1003,8 +992,9 @@ final class Auth extends UserManager {
 			$maxOpenRequests = (int) $maxOpenRequests;
 		}
 
-		$userData = $this->getUserDataByEmailAddress(
+		$userData = $this->getUserDataByEmailAddressAndUsername(
 			$email,
+			$username,
 			[ 'id', 'verified', 'resettable' ]
 		);
 
@@ -1154,6 +1144,37 @@ final class Auth extends UserManager {
 			$userData = $this->db->selectRow(
 				'SELECT ' . $projection . ' FROM ' . $this->makeTableName('users') . ' WHERE email = ?',
 				[ $email ]
+			);
+		}
+		catch (Error $e) {
+			throw new DatabaseError($e->getMessage());
+		}
+
+		if (!empty($userData)) {
+			return $userData;
+		}
+		else {
+			throw new InvalidEmailException();
+		}
+	}
+	
+		/**
+	 * Returns the requested user data for the account with the specified email address (if any)
+	 *
+	 * You must never pass untrusted input to the parameter that takes the column list
+	 *
+	 * @param string $email the email address to look for
+	 * @param array $requestedColumns the columns to request from the user's record
+	 * @return array the user data (if an account was found)
+	 * @throws InvalidEmailException if the email address could not be found
+	 * @throws AuthError if an internal problem occurred (do *not* catch)
+	 */
+	private function getUserDataByEmailAddressAndUsername($email, $username, array $requestedColumns) {
+		try {
+			$projection = \implode(', ', $requestedColumns);
+			$userData = $this->db->selectRow(
+				'SELECT ' . $projection . ' FROM ' . $this->makeTableName('users') . ' WHERE email = ? AND username = ?',
+				[ $email, $username ]
 			);
 		}
 		catch (Error $e) {
