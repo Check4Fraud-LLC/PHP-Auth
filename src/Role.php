@@ -10,11 +10,13 @@ namespace Delight\Auth;
 
 final class Role {
 
-	const ADMIN = 1;
-	const AUTHOR = 2;
-	const COLLABORATOR = 3;
-	const COLLABORATOR = 4;
-	const CONSULTANT = 8;
+	const SUPER_ADMIN = 1;
+	const ADMIN = 2;
+	const SUPERVISOR = 3;
+	const STANDARD = 0;
+	const AUTHOR = 5;
+	const COLLABORATOR = 6;
+	const CONSULTANT = 7;
 	const CONSUMER = 16;
 	const CONTRIBUTOR = 32;
 	const COORDINATOR = 64;
@@ -29,7 +31,6 @@ final class Role {
 	const PUBLISHER = 32768;
 	const REVIEWER = 65536;
 	const SUBSCRIBER = 131072;
-	const SUPER_ADMIN = 262144;
 	const SUPER_EDITOR = 524288;
 	const SUPER_MODERATOR = 1048576;
 	const TRANSLATOR = 2097152;
